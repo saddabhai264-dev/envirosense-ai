@@ -4,3 +4,5 @@ node_modules
 dev-*.log
 dev-*.err.log
 npm-debug.log*
+
+.vercel
