@@ -22,6 +22,8 @@ npm run dev
 
 Create `.env.local` from `.env.example`.
 
+If you are handing this project to another AI tool or developer, read `AI_HANDOFF.md` first.
+
 Required for a production MVP deployment:
 
 ```env
