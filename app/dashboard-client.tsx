@@ -1364,8 +1364,8 @@ export default function DashboardClient() {
               <strong>{supabaseHealth?.ok ? "Production essentials ready" : "Production readiness check"}</strong>
               <span>
                 {supabaseHealth?.ok
-                  ? "Database, media upload, and core risk APIs are ready for sharing."
-                  : "Check required env variables before sending the Vercel link."}
+                  ? "Neon database and live risk APIs are ready. Upload, email, WhatsApp, and OpenAI can be added as integrations."
+                  : "Check core env variables before sending the Vercel link."}
               </span>
             </div>
           </div>

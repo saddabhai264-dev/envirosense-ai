@@ -7,10 +7,10 @@ EnviroSense AI is a web-based NGO command system for Sindh disaster response: li
 - Next.js App Router
 - Neon Postgres for cloud data
 - Custom cookie auth with CEO/Admin/Field Worker/Lab Officer/Public roles
-- UploadThing for report evidence media
+- Optional UploadThing for report evidence media
 - Open-Meteo + NASA POWER backend risk data
-- OpenAI Responses API for real AI triage and decision notes
-- Resend email support for employee assignment notifications
+- Optional OpenAI Responses API for real AI triage and decision notes
+- Optional Resend email support for employee assignment notifications
 - Optional WhatsApp Cloud API alert delivery
 
 ## Local Setup
@@ -22,21 +22,21 @@ npm run dev
 
 Create `.env.local` from `.env.example`.
 
-Required for a share-ready deployment:
+Required for a production MVP deployment:
 
 ```env
 DATABASE_URL=
 CEO_EMAIL=saddabhai264@gmail.com
 CEO_PASSWORD=
-UPLOADTHING_TOKEN=
 OPEN_METEO_BASE_URL=https://api.open-meteo.com/v1
-OPENAI_API_KEY=
-OPENAI_MODEL=gpt-5-mini
 ```
 
-Recommended:
+Optional integrations:
 
 ```env
+UPLOADTHING_TOKEN=
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5-mini
 RESEND_API_KEY=
 ALERT_FROM_EMAIL=EnviroSense AI <alerts@yourdomain.com>
 META_WHATSAPP_TOKEN=
@@ -51,10 +51,11 @@ After setting env vars on Vercel and redeploying, open the CEO dashboard and cli
 The check validates:
 
 - Neon database and schema
-- UploadThing token
-- Email notification env
-- WhatsApp alert env
 - Weather/NASA risk API readiness
+- Optional UploadThing media upload
+- Optional OpenAI AI upgrade
+- Optional email notification env
+- Optional WhatsApp alert env
 
 ## Vercel Env Setup
 
@@ -63,8 +64,11 @@ In Vercel project settings, add these to **Production**:
 - `DATABASE_URL`
 - `CEO_EMAIL`
 - `CEO_PASSWORD`
-- `UPLOADTHING_TOKEN`
 - `OPEN_METEO_BASE_URL`
+
+Optional, add when you want advanced integrations:
+
+- `UPLOADTHING_TOKEN`
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL`
 - `RESEND_API_KEY`

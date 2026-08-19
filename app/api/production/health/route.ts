@@ -57,10 +57,36 @@ export async function GET() {
   }
 
   checks.push(
-    envCheck("uploadthing", "UploadThing media", "UPLOADTHING_TOKEN", true),
-    envCheck("openai", "OpenAI real AI", "OPENAI_API_KEY", false),
-    envPairCheck("email", "Employee/alert email", "RESEND_API_KEY", "ALERT_FROM_EMAIL", false),
-    envPairCheck("whatsapp", "WhatsApp alerts", "META_WHATSAPP_TOKEN", "META_WHATSAPP_PHONE_NUMBER_ID", false),
+    envCheck(
+      "uploadthing",
+      "UploadThing evidence media",
+      "UPLOADTHING_TOKEN",
+      false,
+      "Optional: report text, status, and assignments still save to Neon without media upload."
+    ),
+    envCheck(
+      "openai",
+      "OpenAI real AI",
+      "OPENAI_API_KEY",
+      false,
+      "Optional: rule-based severity, action, and risk intelligence remains active without OpenAI API billing."
+    ),
+    envPairCheck(
+      "email",
+      "Employee/alert email",
+      "RESEND_API_KEY",
+      "ALERT_FROM_EMAIL",
+      false,
+      "Optional: web notifications and dashboard assignments still work without email delivery."
+    ),
+    envPairCheck(
+      "whatsapp",
+      "WhatsApp alerts",
+      "META_WHATSAPP_TOKEN",
+      "META_WHATSAPP_PHONE_NUMBER_ID",
+      false,
+      "Optional: use manual WhatsApp/copy message flow until Meta Cloud API is approved."
+    ),
     {
       key: "weather",
       label: "Weather/NASA risk API",
@@ -72,39 +98,49 @@ export async function GET() {
 
   const required = checks.filter((check) => check.required);
   const requiredReady = required.every((check) => check.ok);
-  const readyCount = checks.filter((check) => check.ok).length;
-  const score = Math.round((readyCount / checks.length) * 100);
+  const optional = checks.filter((check) => !check.required);
+  const optionalReady = optional.filter((check) => check.ok).length;
+  const score = requiredReady
+    ? Math.min(100, 75 + Math.round((optionalReady / Math.max(optional.length, 1)) * 25))
+    : Math.round((checks.filter((check) => check.ok).length / checks.length) * 100);
 
   return NextResponse.json({
     configured: requiredReady,
     ok: requiredReady,
     score,
     message: requiredReady
-      ? "Production essentials are ready."
+      ? "Core production is ready. Optional integrations can be added as the project scales."
       : "Production essentials need attention before sharing.",
     services: checks,
     counts
   });
 }
 
-function envCheck(key: string, label: string, envName: string, required: boolean): ServiceCheck {
+function envCheck(key: string, label: string, envName: string, required: boolean, fallbackMessage?: string): ServiceCheck {
   const ok = Boolean(process.env[envName]);
   return {
     key,
     label,
     ok,
     required,
-    message: ok ? `${envName} is configured.` : `${envName} is missing.`
+    message: ok ? `${envName} is configured.` : fallbackMessage ?? `${envName} is missing.`
   };
 }
 
-function envPairCheck(key: string, label: string, left: string, right: string, required: boolean): ServiceCheck {
+function envPairCheck(
+  key: string,
+  label: string,
+  left: string,
+  right: string,
+  required: boolean,
+  fallbackMessage?: string
+): ServiceCheck {
   const missing = [left, right].filter((name) => !process.env[name]);
   return {
     key,
     label,
     ok: missing.length === 0,
     required,
-    message: missing.length ? `Missing: ${missing.join(", ")}.` : `${left} and ${right} are configured.`
+    message: missing.length ? fallbackMessage ?? `Missing: ${missing.join(", ")}.` : `${left} and ${right} are configured.`
   };
 }
