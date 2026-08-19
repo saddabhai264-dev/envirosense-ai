@@ -7,10 +7,18 @@ declare global {
 
 export const isNeonConfigured = Boolean(process.env.DATABASE_URL);
 
+function getDatabaseUrl() {
+  if (!process.env.DATABASE_URL) {
+    return undefined;
+  }
+
+  return process.env.DATABASE_URL.replace("sslmode=require", "sslmode=verify-full");
+}
+
 export const pool =
   global.envirosensePool ||
   new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: getDatabaseUrl(),
     ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : undefined,
     max: 5
   });
