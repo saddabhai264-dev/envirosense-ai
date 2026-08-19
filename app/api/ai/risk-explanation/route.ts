@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { LiveRiskSnapshot, PublicReport, RiskIntelligence } from "@/lib/types";
+import { generateStructuredJson, isOpenAiConfigured } from "@/lib/openai";
 
 type RequestBody = {
   risk?: LiveRiskSnapshot;
@@ -20,14 +21,74 @@ export async function POST(request: Request) {
   }
 
   const reports = (body.reports ?? []).filter((report) => report.city === body.risk?.city);
-  const intelligence = generateRiskIntelligence(body.risk, reports);
+  const fallback = generateRiskIntelligence(body.risk, reports);
+
+  if (isOpenAiConfigured) {
+    try {
+      const intelligence = await generateStructuredJson<RiskIntelligence>({
+        schema: riskSchema,
+        instructions:
+          "You are EnviroSense AI, an NGO disaster response analyst for Sindh, Pakistan. Use cautious, practical language. Do not claim certainty. Return only schema-valid JSON.",
+        input: {
+          risk: body.risk,
+          publicReports: reports,
+          fallback
+        }
+      });
+
+      return NextResponse.json({
+        ok: true,
+        engine: "OpenAI",
+        data: { ...intelligence, generatedAt: new Date().toISOString() }
+      });
+    } catch (error) {
+      return NextResponse.json({
+        ok: true,
+        engine: "Rule fallback",
+        warning: error instanceof Error ? error.message : "OpenAI failed; fallback used.",
+        data: fallback
+      });
+    }
+  }
 
   return NextResponse.json({
     ok: true,
-    engine: "EnviroSense Decision Engine",
-    data: intelligence
+    engine: "Rule fallback",
+    data: fallback
   });
 }
+
+const riskSchema = {
+  name: "risk_intelligence",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      city: { type: "string" },
+      headline: { type: "string" },
+      summary: { type: "string" },
+      confidence: { type: "string", enum: ["Low", "Medium", "High"] },
+      urgency: { type: "string", enum: ["Monitor", "Prepare", "Respond", "Emergency"] },
+      evidence: { type: "array", items: { type: "string" } },
+      actions: { type: "array", items: { type: "string" } },
+      publicMessage: { type: "string" },
+      escalationTrigger: { type: "string" },
+      generatedAt: { type: "string" }
+    },
+    required: [
+      "city",
+      "headline",
+      "summary",
+      "confidence",
+      "urgency",
+      "evidence",
+      "actions",
+      "publicMessage",
+      "escalationTrigger",
+      "generatedAt"
+    ]
+  }
+};
 
 function generateRiskIntelligence(risk: LiveRiskSnapshot, reports: PublicReport[]): RiskIntelligence {
   const emergencyReports = reports.filter((report) => report.severity === "Emergency").length;

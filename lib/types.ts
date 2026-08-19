@@ -77,6 +77,18 @@ export type RiskIntelligence = {
   generatedAt: string;
 };
 
+export type ReportAiAnalysis = {
+  reportId?: string;
+  headline: string;
+  severityExplanation: string;
+  recommendedActions: string[];
+  publicMessageDraft: string;
+  escalationTrigger: string;
+  confidence: "Low" | "Medium" | "High";
+  generatedAt: string;
+  engine: "OpenAI" | "Rule fallback";
+};
+
 export type VulnerabilityScore = {
   city: string;
   score: number;

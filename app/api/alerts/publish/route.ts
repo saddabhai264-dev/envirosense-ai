@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { ensureNeonSchema, query } from "@/lib/neon";
+import { getCurrentUser } from "@/lib/server-auth";
+import { writeAuditLog } from "@/lib/audit-log";
 
 type AlertRequest = {
   city?: string;
@@ -16,26 +18,14 @@ type ChannelResult = {
 };
 
 export async function POST(request: Request) {
-  const authorization = request.headers.get("authorization");
-  const token = authorization?.replace(/^Bearer\s+/i, "");
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  await ensureNeonSchema();
+  const user = await getCurrentUser();
 
-  if (!token || !url || !anonKey) {
+  if (!user) {
     return NextResponse.json({ ok: false, message: "Authenticated staff access required." }, { status: 401 });
   }
 
-  const supabase = createClient(url, anonKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { persistSession: false, autoRefreshToken: false }
-  });
-  const { data: userData, error: userError } = await supabase.auth.getUser(token);
-  if (userError || !userData.user) {
-    return NextResponse.json({ ok: false, message: "Invalid or expired session." }, { status: 401 });
-  }
-
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", userData.user.id).single();
-  if (!profile || !["ceo", "admin"].includes(profile.role)) {
+  if (!["ceo", "admin"].includes(user.role)) {
     return NextResponse.json({ ok: false, message: "CEO or admin access required." }, { status: 403 });
   }
 
@@ -50,10 +40,25 @@ export async function POST(request: Request) {
   }
 
   const [web, email, whatsapp] = await Promise.all([
-    saveWebAlert(supabase, userData.user.id, { city, title, message, level }),
+    saveWebAlert(user.id, { city, title, message, level }),
     sendEmails(body.emailRecipients ?? [], { city, title, message, level }),
     sendWhatsApp(body.whatsappRecipients ?? [], { city, title, message, level })
   ]);
+
+  await writeAuditLog({
+    actorId: user.id,
+    action: "alert_published",
+    entityType: "web_alert",
+    message: `${user.fullName} published ${level} alert for ${city}.`,
+    metadata: {
+      city,
+      title,
+      level,
+      webStatus: web.status,
+      emailStatus: email.status,
+      whatsappStatus: whatsapp.status
+    }
+  });
 
   return NextResponse.json({
     ok: web.status === "sent",
@@ -62,20 +67,22 @@ export async function POST(request: Request) {
 }
 
 async function saveWebAlert(
-  supabase: SupabaseClient,
   userId: string,
   alert: { city: string; title: string; message: string; level: string }
 ): Promise<ChannelResult> {
-  const { error } = await supabase.from("web_alerts").insert({
-    ...alert,
-    status: "Active",
-    published_at: new Date().toISOString(),
-    created_by: userId
-  });
-
-  return error
-    ? { status: "failed", message: error.message }
-    : { status: "sent", message: "Web alert published to Supabase." };
+  try {
+    await query(
+      `insert into web_alerts (city, title, message, level, status, published_at, created_by)
+       values ($1, $2, $3, $4, 'Active', now(), $5)`,
+      [alert.city, alert.title, alert.message, alert.level, userId]
+    );
+    return { status: "sent", message: "Web alert published to Neon." };
+  } catch (error) {
+    return {
+      status: "failed",
+      message: error instanceof Error ? error.message : "Could not save web alert."
+    };
+  }
 }
 
 async function sendEmails(
