@@ -27,7 +27,19 @@ export async function PATCH(request: Request, { params }: Params) {
     return NextResponse.json({ ok: false, message: "Valid status is required." }, { status: 400 });
   }
 
-  const result = await query("update public_reports set status = $1 where id = $2 returning *", [body.status, id]);
+  const result = user.role === "field_worker"
+    ? await query(
+        `update public_reports
+         set status = $1
+         where id = $2
+           and (city = $3 or exists (
+             select 1 from report_assignments
+             where report_id = public_reports.id and assigned_to = $4
+           ))
+         returning *`,
+        [body.status, id, user.district, user.id]
+      )
+    : await query("update public_reports set status = $1 where id = $2 returning *", [body.status, id]);
   if (!result.rows[0]) {
     return NextResponse.json({ ok: false, message: "Report not found." }, { status: 404 });
   }

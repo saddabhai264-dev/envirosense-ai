@@ -17,6 +17,22 @@ type ChannelResult = {
   message: string;
 };
 
+export async function GET() {
+  await ensureNeonSchema();
+  const user = await getCurrentUser();
+  if (!user || user.role === "public") {
+    return NextResponse.json({ ok: false, message: "Staff access required." }, { status: 403 });
+  }
+
+  const result = await query(
+    `select id, city, title, message, level, status, published_at as "publishedAt"
+     from web_alerts
+     order by published_at desc
+     limit 50`
+  );
+  return NextResponse.json({ ok: true, data: result.rows });
+}
+
 export async function POST(request: Request) {
   await ensureNeonSchema();
   const user = await getCurrentUser();

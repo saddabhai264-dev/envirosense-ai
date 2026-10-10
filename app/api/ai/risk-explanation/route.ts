@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import type { LiveRiskSnapshot, PublicReport, RiskIntelligence } from "@/lib/types";
 import { generateStructuredJson, isOpenAiConfigured } from "@/lib/openai";
+import { getCurrentUser } from "@/lib/server-auth";
+import { requestIsTooLarge } from "@/lib/request-validation";
 
 type RequestBody = {
   risk?: LiveRiskSnapshot;
@@ -8,6 +10,13 @@ type RequestBody = {
 };
 
 export async function POST(request: Request) {
+  const user = await getCurrentUser();
+  if (!user || !["ceo", "admin", "field_worker"].includes(user.role)) {
+    return NextResponse.json({ ok: false, message: "Response staff access required." }, { status: 403 });
+  }
+  if (requestIsTooLarge(request)) {
+    return NextResponse.json({ ok: false, message: "Analysis request is too large." }, { status: 413 });
+  }
   const body = (await request.json()) as RequestBody;
 
   if (!body.risk) {
@@ -20,7 +29,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const reports = (body.reports ?? []).filter((report) => report.city === body.risk?.city);
+  const reports = (body.reports ?? []).filter((report) => report.city === body.risk?.city).slice(0, 50);
   const fallback = generateRiskIntelligence(body.risk, reports);
 
   if (isOpenAiConfigured) {

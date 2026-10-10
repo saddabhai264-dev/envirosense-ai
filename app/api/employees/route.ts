@@ -144,6 +144,10 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ ok: false, message: "Employee not found." }, { status: 404 });
   }
 
+  if (!body.isActive) {
+    await query("delete from app_sessions where user_id = $1", [body.id]);
+  }
+
   await writeAuditLog({
     actorId: user.id,
     action: body.isActive ? "employee_activated" : "employee_deactivated",

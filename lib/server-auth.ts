@@ -74,7 +74,7 @@ export async function getCurrentUser(): Promise<AppUser | null> {
     `select u.id, u.email, u.password_hash, u.salt, u.full_name, u.phone, u.role, u.employee_code, u.district, u.is_active
      from app_sessions s
      join app_users u on u.id = s.user_id
-     where s.token_hash = $1 and s.expires_at > now()
+     where s.token_hash = $1 and s.expires_at > now() and u.is_active = true
      limit 1`,
     [hashToken(token)]
   );
@@ -102,15 +102,17 @@ export function toAppUser(row: UserRow): AppUser {
 }
 
 export function setSessionCookie(response: Response, token: string) {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
   response.headers.append(
     "Set-Cookie",
-    `${sessionCookieName}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 14}`
+    `${sessionCookieName}=${token}; Path=/; HttpOnly; SameSite=Lax; Priority=High${secure}; Max-Age=${60 * 60 * 24 * 14}`
   );
 }
 
 export function clearSessionCookie(response: Response) {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
   response.headers.append(
     "Set-Cookie",
-    `${sessionCookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`
+    `${sessionCookieName}=; Path=/; HttpOnly; SameSite=Lax; Priority=High${secure}; Max-Age=0`
   );
 }

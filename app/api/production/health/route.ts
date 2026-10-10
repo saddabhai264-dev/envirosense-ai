@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ensureNeonSchema, isNeonConfigured, query } from "@/lib/neon";
+import { getCurrentUser } from "@/lib/server-auth";
 
 type ServiceCheck = {
   key: string;
@@ -10,6 +11,10 @@ type ServiceCheck = {
 };
 
 export async function GET() {
+  const user = await getCurrentUser();
+  if (!user || !["ceo", "admin"].includes(user.role)) {
+    return NextResponse.json({ configured: false, ok: false, message: "CEO or admin access required." }, { status: 403 });
+  }
   const checks: ServiceCheck[] = [];
   let counts: { publicReports: number; waterTests: number; assignments: number; auditLogs: number } | undefined;
 
@@ -51,7 +56,7 @@ export async function GET() {
         label: "Neon database",
         ok: false,
         required: true,
-        message: error instanceof Error ? error.message : "Database check failed."
+        message: "Database check failed. Review server logs for details."
       });
     }
   }

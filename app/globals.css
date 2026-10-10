@@ -29,6 +29,73 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+.quickStart {
+  align-items: center;
+  background: linear-gradient(120deg, rgba(31, 138, 112, 0.1), rgba(37, 99, 235, 0.04));
+  border: 1px solid rgba(31, 138, 112, 0.2);
+  border-radius: 18px;
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding: 20px 22px;
+}
+
+.quickStartCopy {
+  align-items: flex-start;
+  display: flex;
+  gap: 14px;
+}
+
+.quickStartCopy h2 {
+  font-size: 19px;
+  margin: 3px 0 5px;
+}
+
+.quickStartCopy span:not(.quickStartIcon) {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.quickStartIcon {
+  align-items: center;
+  background: var(--green);
+  border-radius: 12px;
+  color: white;
+  display: flex;
+  flex: 0 0 42px;
+  height: 42px;
+  justify-content: center;
+}
+
+.quickStartActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.emptyState {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  gap: 12px;
+  grid-column: 1 / -1;
+  justify-content: center;
+  min-height: 120px;
+  padding: 24px;
+  text-align: left;
+}
+
+.emptyState div {
+  display: grid;
+  gap: 4px;
+}
+
+.emptyState strong {
+  color: var(--ink);
+}
+
 .authShell {
   min-height: 100vh;
   display: grid;
@@ -2245,6 +2312,19 @@ h3 {
 }
 
 @media (max-width: 780px) {
+  .quickStart {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .quickStartActions {
+    justify-content: stretch;
+  }
+
+  .quickStartActions button {
+    flex: 1 1 100%;
+  }
+
   .proAuthShell {
     padding: 12px;
   }

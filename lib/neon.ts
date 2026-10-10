@@ -3,6 +3,8 @@ import { Pool, type QueryResultRow } from "pg";
 declare global {
   // eslint-disable-next-line no-var
   var envirosensePool: Pool | undefined;
+  // eslint-disable-next-line no-var
+  var envirosenseSchemaPromise: Promise<void> | undefined;
 }
 
 export const isNeonConfigured = Boolean(process.env.DATABASE_URL);
@@ -36,6 +38,17 @@ export async function ensureNeonSchema() {
     throw new Error("DATABASE_URL is missing.");
   }
 
+  if (!global.envirosenseSchemaPromise) {
+    global.envirosenseSchemaPromise = createNeonSchema().catch((error) => {
+      global.envirosenseSchemaPromise = undefined;
+      throw error;
+    });
+  }
+
+  await global.envirosenseSchemaPromise;
+}
+
+async function createNeonSchema() {
   await query(`
     create extension if not exists pgcrypto;
 

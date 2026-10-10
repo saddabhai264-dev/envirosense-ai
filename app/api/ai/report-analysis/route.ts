@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { generateStructuredJson, isOpenAiConfigured } from "@/lib/openai";
 import type { PublicReport, ReportAiAnalysis } from "@/lib/types";
+import { getCurrentUser } from "@/lib/server-auth";
+import { requestIsTooLarge } from "@/lib/request-validation";
 
 type RequestBody = {
   report?: PublicReport;
@@ -8,12 +10,20 @@ type RequestBody = {
 };
 
 export async function POST(request: Request) {
+  const user = await getCurrentUser();
+  if (!user || !["ceo", "admin", "field_worker"].includes(user.role)) {
+    return NextResponse.json({ ok: false, message: "Response staff access required." }, { status: 403 });
+  }
+  if (requestIsTooLarge(request)) {
+    return NextResponse.json({ ok: false, message: "Analysis request is too large." }, { status: 413 });
+  }
   const body = (await request.json()) as RequestBody;
   if (!body.report) {
     return NextResponse.json({ ok: false, message: "Report is required." }, { status: 400 });
   }
 
-  const fallback = generateFallbackReportAnalysis(body.report, body.relatedReports ?? []);
+  const relatedReports = (body.relatedReports ?? []).slice(0, 50);
+  const fallback = generateFallbackReportAnalysis(body.report, relatedReports);
 
   if (isOpenAiConfigured) {
     try {
@@ -23,7 +33,7 @@ export async function POST(request: Request) {
           "You are EnviroSense AI, supporting an NGO in Sindh, Pakistan. Analyze public environmental reports for triage. Be practical, concise, and avoid overclaiming. Return only schema-valid JSON.",
         input: {
           report: body.report,
-          relatedReports: body.relatedReports ?? [],
+          relatedReports,
           fallback
         }
       });

@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/server-auth";
 import { writeAuditLog } from "@/lib/audit-log";
 import { publicReportInsertPayload } from "@/lib/supabase-mappers";
 import type { PublicReport } from "@/lib/types";
+import { validateReportBody } from "@/lib/request-validation";
 
 type ReportBody = {
   reporterName: string;
@@ -53,7 +54,11 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json()) as ReportBody;
-  const payload = publicReportInsertPayload({ ...body, reporterId: user.id });
+  const validation = validateReportBody(body as unknown as Record<string, unknown>);
+  if (!validation.data) {
+    return NextResponse.json({ ok: false, message: validation.error }, { status: 400 });
+  }
+  const payload = publicReportInsertPayload({ ...validation.data, reporterId: user.id });
 
   const result = await query(
     `insert into public_reports (

@@ -15,10 +15,9 @@ import {
   Server,
   ShieldCheck,
   Sparkles,
-  Trash2,
   Waves
 } from "lucide-react";
-import { alerts, cityRisks, publicReports, waterTests } from "@/lib/mock-data";
+import { cityRisks } from "@/lib/mock-data";
 import { assessWaterQuality, getRiskTone } from "@/lib/rules";
 import {
   mapReportRow,
@@ -64,8 +63,6 @@ const reportTypes = [
 ];
 const severities: PublicReport["severity"][] = ["Low", "Medium", "High", "Emergency"];
 const statuses: PublicReport["status"][] = ["New", "Verified", "In progress", "Resolved", "False/duplicate"];
-const localReportsKey = "envirosense-ai:public-reports";
-const localTestsKey = "envirosense-ai:water-tests";
 const authStats = [
   { value: "7", label: "Sindh districts" },
   { value: "24h", label: "risk monitoring" },
@@ -175,6 +172,16 @@ type AlertDeliveryResponse = {
   ok: boolean;
   message?: string;
   channels?: Record<string, { status: string; message: string }>;
+};
+
+type WebAlert = {
+  id: string;
+  city: string;
+  title: string;
+  message: string;
+  level: string;
+  status: string;
+  publishedAt: string;
 };
 
 type EmployeeAccount = {
@@ -314,8 +321,9 @@ export default function DashboardClient() {
   const [alertForm, setAlertForm] = useState(initialAlertForm);
   const [alertDelivery, setAlertDelivery] = useState<AlertDeliveryResponse | null>(null);
   const [isPublishingAlert, setIsPublishingAlert] = useState(false);
-  const [reports, setReports] = useState(publicReports);
-  const [tests, setTests] = useState(waterTests);
+  const [reports, setReports] = useState<PublicReport[]>([]);
+  const [tests, setTests] = useState<WaterTest[]>([]);
+  const [webAlerts, setWebAlerts] = useState<WebAlert[]>([]);
   const [reportForm, setReportForm] = useState(initialReportForm);
   const [waterForm, setWaterForm] = useState(initialWaterForm);
   const [reportMediaUrl, setReportMediaUrl] = useState<string | null>(null);
@@ -351,9 +359,9 @@ export default function DashboardClient() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
 
-  const highRiskAreas = cityRisks.filter((city) => city.level === "High" || city.level === "Critical");
+  const highRiskAreas = liveRisks.filter((city) => city.level === "High" || city.level === "Critical");
   const unsafeWaterTests = tests.filter((test) => assessWaterQuality(test).status !== "Safe to drink");
-  const activeAlerts = alerts.filter((alert) => alert.status === "Active");
+  const activeAlerts = webAlerts.filter((alert) => alert.status === "Active");
   const priorityReports = reports.filter((report) => report.severity === "Emergency" || report.severity === "High");
   const openReports = reports.filter((report) => report.status === "New" || report.status === "Verified" || report.status === "In progress");
   const evidenceReports = reports.filter((report) => Boolean(report.mediaUrl));
@@ -440,56 +448,38 @@ export default function DashboardClient() {
   async function loadCloudData() {
     setIsLoadingData(true);
     try {
-      if (accessMode === "public" || canViewReports) {
-        const reportsResponse = await fetch("/api/reports", { cache: "no-store" });
-        const reportsPayload = (await reportsResponse.json()) as { ok: boolean; data?: unknown[]; message?: string };
-        if (!reportsResponse.ok || !reportsPayload.ok) {
-          throw new Error(reportsPayload.message || "Could not load reports.");
-        }
-        setReports((reportsPayload.data || []).map((row) => mapReportRow(row as Parameters<typeof mapReportRow>[0])));
-      } else {
-        setReports([]);
-      }
+      const shouldLoadReports = accessMode === "public" || canViewReports;
+      const isStaff = accessMode === "staff";
+      const isManager = currentRole === "ceo" || currentRole === "admin";
+      const [reportResult, testResult, employeeResult, alertResult, assignmentResult, auditResult] = await Promise.all([
+        shouldLoadReports ? fetchJson<{ ok: boolean; data?: unknown[]; message?: string }>("/api/reports") : null,
+        isStaff && canManageWaterTests ? fetchJson<{ ok: boolean; data?: unknown[] }>("/api/water-tests") : null,
+        isStaff && isManager ? fetchJson<{ ok: boolean; data?: EmployeeAccount[] }>("/api/employees") : null,
+        isStaff ? fetchJson<{ ok: boolean; data?: WebAlert[] }>("/api/alerts/publish") : null,
+        isStaff && canViewReports ? fetchJson<{ ok: boolean; data?: unknown[] }>("/api/assignments") : null,
+        isStaff && isManager ? fetchJson<{ ok: boolean; data?: unknown[] }>("/api/audit-logs") : null
+      ]);
 
-      if (accessMode === "staff") {
-        if (canManageWaterTests) {
-          const testsResponse = await fetch("/api/water-tests", { cache: "no-store" });
-          const testsPayload = (await testsResponse.json()) as { ok: boolean; data?: unknown[]; message?: string };
-          if (testsResponse.ok && testsPayload.ok) {
-            setTests((testsPayload.data || []).map((row) => mapWaterTestRow(row as Parameters<typeof mapWaterTestRow>[0])));
-          }
-        } else {
-          setTests([]);
+      if (reportResult) {
+        if (!reportResult.response.ok || !reportResult.payload.ok) {
+          throw new Error(reportResult.payload.message || "Could not load reports.");
         }
+        setReports((reportResult.payload.data || []).map((row) => mapReportRow(row as Parameters<typeof mapReportRow>[0])));
+      } else setReports([]);
 
-        if (currentRole === "ceo" || currentRole === "admin") {
-          const employeesResponse = await fetch("/api/employees", { cache: "no-store" });
-          const employeesPayload = (await employeesResponse.json()) as { ok: boolean; data?: EmployeeAccount[]; message?: string };
-          if (employeesResponse.ok && employeesPayload.ok) {
-            setEmployees(employeesPayload.data || []);
-          }
-        }
+      if (testResult?.response.ok && testResult.payload.ok) {
+        setTests((testResult.payload.data || []).map((row) => mapWaterTestRow(row as Parameters<typeof mapWaterTestRow>[0])));
+      } else if (!canManageWaterTests) setTests([]);
 
-        if (canViewReports) {
-          const assignmentsResponse = await fetch("/api/assignments", { cache: "no-store" });
-          const assignmentsPayload = (await assignmentsResponse.json()) as { ok: boolean; data?: unknown[]; message?: string };
-          if (assignmentsResponse.ok && assignmentsPayload.ok) {
-            setAssignments((assignmentsPayload.data || []).map(mapAssignmentRow));
-          }
-        } else {
-          setAssignments([]);
-        }
+      if (employeeResult?.response.ok && employeeResult.payload.ok) setEmployees(employeeResult.payload.data || []);
+      if (alertResult?.response.ok && alertResult.payload.ok) setWebAlerts(alertResult.payload.data || []);
+      if (assignmentResult?.response.ok && assignmentResult.payload.ok) {
+        setAssignments((assignmentResult.payload.data || []).map(mapAssignmentRow));
+      } else if (!canViewReports) setAssignments([]);
+      if (auditResult?.response.ok && auditResult.payload.ok) {
+        setAuditLogs((auditResult.payload.data || []).map(mapAuditLogRow));
+      } else if (!isManager) setAuditLogs([]);
 
-        if (currentRole === "ceo" || currentRole === "admin") {
-          const auditResponse = await fetch("/api/audit-logs", { cache: "no-store" });
-          const auditPayload = (await auditResponse.json()) as { ok: boolean; data?: unknown[]; message?: string };
-          if (auditResponse.ok && auditPayload.ok) {
-            setAuditLogs((auditPayload.data || []).map(mapAuditLogRow));
-          }
-        } else {
-          setAuditLogs([]);
-        }
-      }
       setDataMessage("Neon cloud data loaded. New submissions will persist after refresh.");
     } catch (error) {
       setDataMessage(error instanceof Error ? error.message : "Could not load Neon data.");
@@ -734,6 +724,7 @@ export default function DashboardClient() {
 
       if (payload.ok) {
         setAlertForm(initialAlertForm);
+        await refreshAlerts();
       }
     } catch {
       setAlertDelivery({ ok: false, message: "Alert service could not be reached." });
@@ -743,19 +734,12 @@ export default function DashboardClient() {
   }
 
   useEffect(() => {
-    refreshLiveRisk();
-    checkSupabaseHealth();
-    // Initial dashboard hydration should run once after mount.
+    if (accessMode !== "staff") return;
+    if (["ceo", "admin", "field_worker"].includes(currentRole || "")) refreshLiveRisk();
+    if (currentRole === "ceo" || currentRole === "admin") checkSupabaseHealth();
+    // Run operational services only after an authorized staff session is known.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    writeLocalState(localReportsKey, reports);
-  }, [reports]);
-
-  useEffect(() => {
-    writeLocalState(localTestsKey, tests);
-  }, [tests]);
+  }, [accessMode, currentRole]);
 
   useEffect(() => {
     setReportAnalysis(null);
@@ -997,12 +981,11 @@ export default function DashboardClient() {
     }
   }
 
-  function clearLocalData() {
-    localStorage.removeItem(localReportsKey);
-    localStorage.removeItem(localTestsKey);
-    setReports(publicReports);
-    setTests(waterTests);
-    setDataMessage("Local browser data cleared. Sample data restored.");
+  async function refreshAlerts() {
+    if (currentRole !== "ceo" && currentRole !== "admin") return;
+    const response = await fetch("/api/alerts/publish", { cache: "no-store" });
+    const payload = (await response.json()) as { ok: boolean; data?: WebAlert[] };
+    if (response.ok && payload.ok) setWebAlerts(payload.data || []);
   }
 
   function useCurrentLocation() {
@@ -1327,6 +1310,16 @@ export default function DashboardClient() {
           />
         ) : null}
 
+        {accessMode === "staff" && activeStaffTab === "overview" && (currentRole === "ceo" || currentRole === "admin") ? (
+          <RoleQuickStart
+            role={currentRole}
+            openReports={openReports.length}
+            activeAssignments={activeAssignments.length}
+            unsafeWaterTests={unsafeWaterTests.length}
+            onNavigate={setActiveStaffTab}
+          />
+        ) : null}
+
         {accessMode === "staff" && activeStaffTab === "overview" ? (
         <section className="metricGrid" id="dashboard" aria-label="Dashboard metrics">
           <MetricCard icon={<Bell size={20} />} label="Active Alerts" value={activeAlerts.length.toString()} detail="Web warnings live" tone="amber" />
@@ -1336,7 +1329,7 @@ export default function DashboardClient() {
         </section>
         ) : null}
 
-        {accessMode === "staff" && activeStaffTab === "overview" ? (
+        {accessMode === "staff" && activeStaffTab === "overview" && (currentRole === "ceo" || currentRole === "admin") ? (
         <section className="commandCenterBand" aria-label="NGO command center">
           <div className="commandIntro">
             <p className="eyebrow">NGO command center</p>
@@ -1347,7 +1340,7 @@ export default function DashboardClient() {
             <span><strong>{priorityReports.length}</strong> priority cases</span>
             <span><strong>{openReports.length}</strong> open reports</span>
             <span><strong>{evidenceReports.length}</strong> evidence files</span>
-            <span><strong>{currentRole === "field_worker" ? activeAssignments.length : fieldTeams.length}</strong> {currentRole === "field_worker" ? "my active tasks" : "field units"}</span>
+            <span><strong>{fieldTeams.length}</strong> field units</span>
           </div>
         </section>
         ) : null}
@@ -1356,7 +1349,7 @@ export default function DashboardClient() {
           <ActivityTimeline logs={auditLogs} onRefresh={refreshAuditLogs} />
         ) : null}
 
-        {accessMode === "staff" && activeStaffTab === "overview" ? (
+        {accessMode === "staff" && activeStaffTab === "overview" && (currentRole === "ceo" || currentRole === "admin") ? (
         <section className="setupStrip" aria-label="Persistence setup status">
           <div className="setupSummary">
             <Server size={20} />
@@ -1378,12 +1371,6 @@ export default function DashboardClient() {
             <Server size={17} />
             {isCheckingSupabase ? "Checking" : "Production Check"}
           </button>
-          {!supabaseHealth?.ok ? (
-            <button className="secondaryButton" type="button" onClick={clearLocalData}>
-              <Trash2 size={17} />
-              Clear Local
-            </button>
-          ) : null}
           {supabaseHealth?.services?.length ? (
             <div className="serviceCheckGrid">
               {supabaseHealth.services.map((service) => (
@@ -1527,6 +1514,7 @@ export default function DashboardClient() {
                   </article>
                 );
               })}
+              {!tests.length ? <EmptyState title="No water tests yet" message="Add the first verified lab result from Intake Forms." /> : null}
             </div>
           </div>
           ) : null}
@@ -1608,6 +1596,7 @@ export default function DashboardClient() {
                   </button>
                 </div>
               ))}
+              {!reports.length ? <EmptyState title="No reports found" message="New public and field reports will appear here." /> : null}
             </div>
             <div className="inlineReportDetail">
               <ReportDetail report={selectedReport} />
@@ -1651,8 +1640,8 @@ export default function DashboardClient() {
               ) : null}
             </div>
             <div className="alertBoard">
-              {alerts.map((alert) => (
-                <article className="alertItem" key={alert.title}>
+              {webAlerts.map((alert) => (
+                <article className="alertItem" key={alert.id}>
                   <div className={`alertIcon ${alert.level.toLowerCase()}`}>
                     <AlertTriangle size={18} />
                   </div>
@@ -1662,6 +1651,7 @@ export default function DashboardClient() {
                   </div>
                 </article>
               ))}
+              {!webAlerts.length ? <EmptyState title="No alerts published" message="Use Compose Alert when a verified warning is ready." /> : null}
             </div>
           </div>
         </section>
@@ -1935,6 +1925,77 @@ function MetricCard({
         <small>{detail}</small>
       </div>
     </article>
+  );
+}
+
+function RoleQuickStart({
+  role,
+  openReports,
+  activeAssignments,
+  unsafeWaterTests,
+  onNavigate
+}: {
+  role: ProfileRole | null;
+  openReports: number;
+  activeAssignments: number;
+  unsafeWaterTests: number;
+  onNavigate: (tab: StaffTab) => void;
+}) {
+  const isLab = role === "lab_officer";
+  const isField = role === "field_worker";
+  const title = isLab
+    ? "Start with today’s water checks"
+    : isField
+      ? "Focus on your assigned field work"
+      : "Review urgent signals, then coordinate response";
+  const message = isLab
+    ? `${unsafeWaterTests} test result(s) currently require treatment or follow-up.`
+    : isField
+      ? `${activeAssignments} active assignment(s) need field updates.`
+      : `${openReports} open report(s) are waiting for verification or assignment.`;
+
+  return (
+    <section className="quickStart" aria-label="Recommended actions">
+      <div className="quickStartCopy">
+        <span className="quickStartIcon"><Sparkles size={18} /></span>
+        <div>
+          <p className="eyebrow">Recommended next step</p>
+          <h2>{title}</h2>
+          <span>{message}</span>
+        </div>
+      </div>
+      <div className="quickStartActions">
+        {isLab ? (
+          <>
+            <button className="primaryButton" type="button" onClick={() => onNavigate("intake")}>Add water test</button>
+            <button className="secondaryButton" type="button" onClick={() => onNavigate("water")}>View results</button>
+          </>
+        ) : isField ? (
+          <>
+            <button className="primaryButton" type="button" onClick={() => onNavigate("assignments")}>Open my tasks</button>
+            <button className="secondaryButton" type="button" onClick={() => onNavigate("reports")}>District reports</button>
+          </>
+        ) : (
+          <>
+            <button className="primaryButton" type="button" onClick={() => onNavigate("reports")}>Review reports</button>
+            <button className="secondaryButton" type="button" onClick={() => onNavigate("assignments")}>Manage assignments</button>
+            <button className="secondaryButton" type="button" onClick={() => onNavigate("risk")}>Open risk map</button>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function EmptyState({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="emptyState">
+      <FileText size={20} />
+      <div>
+        <strong>{title}</strong>
+        <span>{message}</span>
+      </div>
+    </div>
   );
 }
 
@@ -2565,23 +2626,6 @@ function toNumber(value: string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function readLocalState<T>(key: string) {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeLocalState<T>(key: string, value: T) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Browser storage can fail in private mode or when quota is full.
-  }
-}
-
 function splitRecipients(value: string) {
   return value
     .split(",")
@@ -2768,4 +2812,10 @@ function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}) {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), requestTimeoutMs);
   return fetch(input, { ...init, signal: controller.signal }).finally(() => window.clearTimeout(timeout));
+}
+
+async function fetchJson<T>(url: string) {
+  const response = await fetch(url, { cache: "no-store" });
+  const payload = (await response.json()) as T;
+  return { response, payload };
 }

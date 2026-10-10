@@ -4,6 +4,8 @@ import { getCurrentUser } from "@/lib/server-auth";
 import { writeAuditLog } from "@/lib/audit-log";
 import { waterTestInsertPayload } from "@/lib/supabase-mappers";
 import type { WaterTest } from "@/lib/types";
+import { assessWaterQuality } from "@/lib/rules";
+import { validateWaterTest } from "@/lib/request-validation";
 
 export async function GET() {
   await ensureNeonSchema();
@@ -24,7 +26,16 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json()) as WaterTest;
-  const payload = waterTestInsertPayload(body, user.id);
+  const validation = validateWaterTest(body as unknown as Record<string, unknown>);
+  if (!validation.data) {
+    return NextResponse.json({ ok: false, message: validation.error }, { status: 400 });
+  }
+  const assessment = assessWaterQuality(validation.data);
+  const payload = waterTestInsertPayload({
+    ...validation.data,
+    result: assessment.status,
+    recommendation: assessment.recommendation
+  }, user.id);
   const result = await query(
     `insert into water_tests (
       city, location_text, latitude, longitude, ph, tds, turbidity, residual_chlorine,
