@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Droplets,
   FileText,
+  Leaf,
   LogOut,
   LocateFixed,
   MapPin,
@@ -1028,9 +1029,10 @@ export default function DashboardClient() {
               <span>Operational Intelligence</span>
             </div>
             <div>
+              <span className="natureLive"><i /> Living systems intelligence</span>
               <p className="eyebrow">EnviroSense AI</p>
-              <h1>Disaster intelligence for Sindh response teams</h1>
-              <p>Live risk signals, public incident reports, water safety checks, and NGO response actions in one secure command system.</p>
+              <h1>See risk early. Protect people and nature.</h1>
+              <p>From Indus floodplains to community water sources, turn environmental signals into faster, coordinated action.</p>
             </div>
             <div className="authStatGrid">
               {authStats.map((stat) => (
@@ -1172,6 +1174,11 @@ export default function DashboardClient() {
           ))}
         </nav>
 
+        <div className="sidebarNature" aria-hidden="true">
+          <span><Leaf size={14} /> Living Sindh</span>
+          <strong>Rivers, wetlands and communities—one connected picture.</strong>
+        </div>
+
         <div className="sidebarPanel">
           <Radio size={18} />
           <div>
@@ -1230,6 +1237,21 @@ export default function DashboardClient() {
             </button>
           </div>
         </header>
+
+        {accessMode === "public" ? (
+          <section className="publicNatureWelcome">
+            <div>
+              <span className="natureLive"><i /> Community-powered protection</span>
+              <h2>Your local report can protect an entire community.</h2>
+              <p>Share clear location details and evidence. EnviroSense routes the signal to response teams for verification and action.</p>
+            </div>
+            <div className="publicNatureSteps" aria-label="Reporting steps">
+              <span><b>01</b> Report</span>
+              <span><b>02</b> Verify</span>
+              <span><b>03</b> Respond</span>
+            </div>
+          </section>
+        ) : null}
 
         {canPublishAlerts && showAlertComposer && activeStaffTab === "alerts" ? (
           <section className="alertComposer">
@@ -1316,6 +1338,15 @@ export default function DashboardClient() {
             openReports={openReports.length}
             activeAssignments={activeAssignments.length}
             unsafeWaterTests={unsafeWaterTests.length}
+            onNavigate={setActiveStaffTab}
+          />
+        ) : null}
+
+        {accessMode === "staff" && activeStaffTab === "overview" ? (
+          <NaturePulse
+            role={currentRole}
+            districtCount={liveRisks.length || cities.length}
+            highRiskCount={highRiskAreas.length}
             onNavigate={setActiveStaffTab}
           />
         ) : null}
@@ -1982,6 +2013,43 @@ function RoleQuickStart({
             <button className="secondaryButton" type="button" onClick={() => onNavigate("risk")}>Open risk map</button>
           </>
         )}
+      </div>
+    </section>
+  );
+}
+
+function NaturePulse({
+  role,
+  districtCount,
+  highRiskCount,
+  onNavigate
+}: {
+  role: ProfileRole | null;
+  districtCount: number;
+  highRiskCount: number;
+  onNavigate: (tab: StaffTab) => void;
+}) {
+  const isLab = role === "lab_officer";
+  return (
+    <section className="naturePulse" aria-label="Sindh environmental overview">
+      <div className="naturePulseContent">
+        <span className="natureLive"><i /> Ecosystem watch</span>
+        <p className="eyebrow">Living Sindh</p>
+        <h2>From rivers to roots, see what needs protection next.</h2>
+        <p>Floodplains, wetlands, drinking water and communities are connected. EnviroSense turns their signals into one operational picture.</p>
+        <div className="ecosystemChips">
+          <span><Leaf size={14} /> Mangroves</span>
+          <span><Waves size={14} /> Wetlands</span>
+          <span><Droplets size={14} /> Water safety</span>
+        </div>
+      </div>
+      <div className="naturePulseInsight">
+        <small>Live district coverage</small>
+        <strong>{districtCount}</strong>
+        <span>{highRiskCount ? `${highRiskCount} district(s) need closer monitoring` : "Environmental network standing by"}</span>
+        <button className="natureAction" type="button" onClick={() => onNavigate(isLab ? "intake" : "risk")}>
+          {isLab ? "Open water desk" : "Explore live environment"}
+        </button>
       </div>
     </section>
   );
